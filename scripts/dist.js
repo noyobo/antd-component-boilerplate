@@ -1,5 +1,6 @@
 const babel = require('gulp-babel');
 const gulp = require('gulp');
+const gulpTypescript = require('gulp-typescript');
 const log = require('fancy-log');
 const merge2 = require('merge2');
 const path = require('path');
@@ -21,7 +22,35 @@ rimraf.sync(esDir);
 
 log('clean output done.');
 
-function babelify(modules) {
+function compileJsx(modules) {
+  let stream = gulp.src([
+    'components/**/*.js',
+    'components/**/*.jsx',
+    '!components/**/__tests__/**/*',
+  ]);
+
+  return babelify(stream, modules).on('end', () => {
+    log('jsx compiled', { modules });
+  });
+}
+
+function compileTsx(modules) {
+  const output = modules === false ? esDir : libDir;
+  const tsProject = gulpTypescript.createProject('tsconfig.json');
+  const tsResult = gulp
+    .src(['components/**/*.ts', 'components/**/*.tsx', 'components/**/*.d.ts'])
+    .pipe(tsProject());
+
+  tsResult.dts.pipe(gulp.dest(output)).on('end', () => {
+    log('dts generate done!');
+  });
+
+  return babelify(tsResult.js, modules).on('end', () => {
+    log('tsx compiled', { modules });
+  });
+}
+
+function babelify(js, modules) {
   const output = modules === false ? esDir : libDir;
   const babelConfig = getBabelConfig(modules);
   delete babelConfig.cacheDirectory;
@@ -31,35 +60,30 @@ function babelify(modules) {
     babelConfig.plugins.push(require.resolve('babel-plugin-add-module-exports'));
   }
 
-  let stream = gulp
-    .src(['components/**/*.js', 'components/**/*.jsx', '!components/**/__tests__/**/*'])
-    .pipe(babel(babelConfig))
-    .pipe(
-      through2.obj(function z(file, encoding, next) {
-        this.push(file.clone());
-        if (file.path.match(/(\/|\\)style(\/|\\)index\.js/)) {
-          const content = file.contents.toString(encoding);
+  let stream = js.pipe(babel(babelConfig)).pipe(
+    through2.obj(function z(file, encoding, next) {
+      this.push(file.clone());
+      if (file.path.match(/(\/|\\)style(\/|\\)index\.js/)) {
+        const content = file.contents.toString(encoding);
 
-          file.contents = Buffer.from(cssInjection(content));
-          file.path = file.path.replace(/index\.js/, 'css.js');
-          this.push(file);
-          next();
-        } else {
-          next();
-        }
-      }),
-    );
+        file.contents = Buffer.from(cssInjection(content));
+        file.path = file.path.replace(/index\.js/, 'css.js');
+        this.push(file);
+        next();
+      } else {
+        next();
+      }
+    })
+  );
   if (modules === false) {
     stream = stream.pipe(
       stripCode({
         start_comment: '@remove-on-es-build-begin',
         end_comment: '@remove-on-es-build-end',
-      }),
+      })
     );
   }
-  return stream.pipe(gulp.dest(output)).on('end', () => {
-    log('babel compiled', { modules });
-  });
+  return stream.pipe(gulp.dest(output));
 }
 
 function compile(modules) {
@@ -83,7 +107,7 @@ function compile(modules) {
         } else {
           next();
         }
-      }),
+      })
     )
     .pipe(gulp.dest(output))
     .on('end', () => {
@@ -95,8 +119,9 @@ function compile(modules) {
     .on('end', () => {
       log('assets compiled', { modules });
     });
-  const js = babelify(modules);
-  return merge2([js, less, assets]);
+  const js = compileJsx(modules);
+  const ts = compileTsx(modules);
+  return merge2([less, assets, js, ts]);
 }
 
 compile(true);
