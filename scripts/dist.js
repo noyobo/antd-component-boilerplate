@@ -32,7 +32,7 @@ function babelify(modules) {
   }
 
   let stream = gulp
-    .src(['components/**/*.js', 'components/**/*.jsx'])
+    .src(['components/**/*.js', 'components/**/*.jsx', '!components/**/__tests__/**/*'])
     .pipe(babel(babelConfig))
     .pipe(
       through2.obj(function z(file, encoding, next) {
