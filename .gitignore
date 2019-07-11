@@ -1,0 +1,14 @@
+docs/build/
+lib/
+!scripts/lib/
+es/
+node_modules/
+coverage/
+npm-debug.log
+.eslintcache
+yarn-error.log
+.DS_Store
+
+
+scripts/dll/
+!scripts/dll/vendor.js
